@@ -1,6 +1,8 @@
 node_modules/
 kontomierz-session.json
-data/transactions.csv
-data/imported.json
-data/errors.json
+data/
 .env
+.env.*
+dist/
+coverage/
+.DS_Store
