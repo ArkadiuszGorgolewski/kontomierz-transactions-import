@@ -1,69 +1,88 @@
-# N26 → Kontomierz Importer
+# Multi-bank → Kontomierz Importer
 
-Importer transakcji z plików CSV eksportowanych z niemieckiego N26 do
-Kontomierz.pl.
+Importer transakcji z plików CSV do Kontomierz.pl.
 
-Program działa w Node.js i wykorzystuje Playwright do automatycznego
-wprowadzania transakcji przez interfejs webowy Kontomierza. Nie korzysta
-z API Kontomierza.
+Aplikacja działa w Node.js i wykorzystuje Playwright do automatycznego wprowadzania transakcji przez interfejs webowy Kontomierza. Nie korzysta z publicznego API Kontomierza.
+
+Projekt jest zaprojektowany jako importer wielobankowy. Każdy bank może mieć własny parser CSV, ale po sparsowaniu wszystkie transakcje są zamieniane do wspólnego formatu i obsługiwane przez ten sam mechanizm importu do Kontomierza.
+
+Dodanie kolejnego banku nie wymaga przebudowy całej aplikacji — wystarczy dodać parser oraz konfigurację źródła.
 
 ## Funkcje
 
--   import CSV z N26,
--   obsługa wydatków i przychodów,
--   automatyczny wybór portfela `N26 EUR`,
--   automatyczne ustawianie daty w kalendarzu,
--   obsługa polskiej i angielskiej lokalizacji kalendarza,
--   automatyczne przechodzenie między miesiącami,
--   mapowanie kontrahentów/opisów na kategorie i subkategorie,
--   osobne reguły kategorii dla przychodów i wydatków,
--   dopasowanie przez fragment tekstu lub RegExp,
--   zapamiętywanie już zaimportowanych transakcji,
--   zatrzymanie importu przy błędzie.
+- import transakcji z wielu banków,
+- osobny parser CSV dla każdego banku,
+- wspólny format transakcji niezależnie od źródła,
+- osobna nazwa portfela Kontomierza dla każdego banku,
+- możliwość włączania i wyłączania poszczególnych źródeł,
+- automatyczne pomijanie brakujących plików CSV,
+- obsługa przychodów i wydatków,
+- automatyczny wybór właściwego portfela,
+- automatyczne ustawianie daty w kalendarzu,
+- obsługa polskiej i angielskiej lokalizacji kalendarza,
+- automatyczne przechodzenie między miesiącami,
+- wspólne mapowanie kategorii i subkategorii dla wszystkich banków,
+- reguły kategorii zależne od przychodu lub wydatku,
+- dopasowanie po fragmencie tekstu lub RegExp,
+- zapamiętywanie już zaimportowanych transakcji,
+- ochrona przed ponownym importem tych samych operacji,
+- zatrzymanie importu przy pierwszym błędzie,
+- zapis informacji o błędach.
+
+## Architektura
+
+```text
+CSV banku
+   ↓
+parser konkretnego banku
+   ↓
+wspólny format transakcji
+   ↓
+mapowanie kategorii
+   ↓
+Playwright
+   ↓
+Kontomierz
+```
+
+Każdy parser odpowiada tylko za przekształcenie własnego formatu CSV do wspólnego modelu. Reszta aplikacji nie musi wiedzieć, z którego banku pochodzi transakcja.
 
 ## Wymagania
 
--   macOS (projekt może działać również na innych systemach
-    obsługiwanych przez Node.js i Playwright),
--   Node.js,
--   npm,
--   konto Kontomierz,
--   ręcznie utworzony portfel `N26 EUR` w Kontomierzu,
--   plik CSV wyeksportowany z N26.
+- Node.js 18 lub nowszy,
+- npm,
+- Playwright,
+- konto Kontomierz,
+- ręcznie utworzone portfele odpowiadające importowanym rachunkom,
+- pliki CSV wyeksportowane z obsługiwanych banków.
 
-Sprawdzenie Node.js:
+Sprawdzenie:
 
-``` bash
+```bash
 node -v
 npm -v
 ```
 
 ## Instalacja
 
-Utwórz katalog projektu:
-
-``` bash
-mkdir n26-kontomierz
-cd n26-kontomierz
+```bash
+cd kontomierz-transactions-import
+npm install
+npx playwright install chromium
 ```
 
-Zainicjuj projekt:
+Jeśli projekt jest tworzony od początku:
 
-``` bash
+```bash
 npm init -y
-```
-
-Zainstaluj Playwright:
-
-``` bash
 npm install playwright
 npx playwright install chromium
 ```
 
 ## Struktura projektu
 
-``` text
-n26-kontomierz/
+```text
+kontomierz-transactions-import/
 ├── package.json
 ├── package-lock.json
 ├── kontomierz-session.json
@@ -73,191 +92,359 @@ n26-kontomierz/
 │   ├── categories.js
 │   ├── kontomierz.js
 │   ├── login.js
-│   └── index.js
+│   ├── index.js
+│   └── parsers/
+│       ├── common.js
+│       ├── n26.js
+│       ├── mbank.js
+│       ├── aliorbank.js
+│       └── ...
 └── data/
-    ├── transactions.csv
+    ├── n26.csv
+    ├── mbank.csv
+    ├── aliorbank.csv
+    ├── ...
     ├── imported.json
     └── errors.json
 ```
 
-`kontomierz-session.json`, `imported.json` i `errors.json` są tworzone
-podczas działania programu.
+Katalog `src/parsers/` może zawierać dowolną liczbę parserów. Analogicznie katalog `data/` może zawierać pliki CSV z dowolnej liczby skonfigurowanych banków.
 
-## CSV z N26
+## Konfiguracja banków i portfeli
 
-Plik CSV należy umieścić jako:
+Konfiguracja znajduje się w:
 
-``` text
-data/transactions.csv
-```
-
-Importer jest przygotowany dla eksportu zawierającego kolumny:
-
-``` text
-Booking Date
-Value Date
-Partner Name
-Partner Iban
-Type
-Payment Reference
-Account Name
-Amount (EUR)
-Original Amount
-Original Currency
-Exchange Rate
-```
-
-Znak kwoty określa kierunek transakcji:
-
-``` text
--50.94  → wydatek
-2500.00 → przychód
-```
-
-Do pola kwoty w Kontomierzu wpisywana jest wartość bezwzględna, a typ
-`Wydatek` lub `Przychód` wybierany jest osobno.
-
-## Konfiguracja
-
-Najważniejsze ustawienia znajdują się w:
-
-``` text
+```text
 src/config.js
 ```
 
 Przykład:
 
-``` javascript
+```javascript
+const path = require("node:path");
+
+const ROOT = path.resolve(__dirname, "..");
+
 module.exports = {
-  accountName: "N26 EUR",
   kontomierzUrl: "https://app.kontomierz.pl/",
+
+  sessionFile: path.join(ROOT, "kontomierz-session.json"),
+  importedFile: path.join(ROOT, "data", "imported.json"),
+  errorsFile: path.join(ROOT, "data", "errors.json"),
+
   headless: false,
   slowMo: 200,
   delay: 500,
-  maxTransactions: 10,
+  maxTransactions: null,
+
+  banks: {
+    n26: {
+      enabled: true,
+      file: path.join(ROOT, "data", "n26.csv"),
+      walletName: "N26 EUR",
+    },
+
+    mbank: {
+      enabled: true,
+      file: path.join(ROOT, "data", "mbank.csv"),
+      walletName: "mBank PLN",
+    },
+
+    aliorbank: {
+      enabled: true,
+      file: path.join(ROOT, "data", "aliorbank.csv"),
+      walletName: "Alior Bank PLN",
+    },
+
+    // Kolejne banki można dodawać tutaj.
+  },
 };
 ```
 
-### Limit transakcji
+Liczba pozycji w `banks` nie jest ograniczona.
 
-Podczas testów warto używać:
+### Nazwy portfeli
 
-``` javascript
-maxTransactions: 1,
+`walletName` musi dokładnie odpowiadać nazwie portfela widocznej w dropdownie Kontomierza.
+
+```javascript
+walletName: "Konto osobiste PLN"
+```
+
+Importer wybiera portfel osobno dla każdej transakcji na podstawie źródła.
+
+### Włączanie i wyłączanie źródeł
+
+```javascript
+enabled: true
+```
+
+Aby wyłączyć bank:
+
+```javascript
+enabled: false
+```
+
+### Brakujący CSV
+
+Nie trzeba posiadać wszystkich skonfigurowanych plików przy każdym uruchomieniu. Brakujący plik może zostać pominięty, a importer będzie kontynuował pracę z pozostałymi źródłami.
+
+## Limit bezpieczeństwa
+
+Podczas testowania:
+
+```javascript
+maxTransactions: 1
 ```
 
 lub:
 
-``` javascript
-maxTransactions: 10,
+```javascript
+maxTransactions: 10
 ```
 
 Aby importować wszystkie nowe transakcje:
 
-``` javascript
-maxTransactions: null,
+```javascript
+maxTransactions: null
 ```
+
+Limit dotyczy wspólnej listy nowych transakcji ze wszystkich aktywnych źródeł.
 
 ## Logowanie do Kontomierza
 
-Logowanie jest oddzielone od importu.
-
-Uruchom:
-
-``` bash
+```bash
 node src/login.js
 ```
 
 Następnie:
 
-1.  zaloguj się ręcznie w otwartym Chromium,
-2.  poczekaj na załadowanie aplikacji Kontomierz,
-3.  nie zamykaj przeglądarki,
-4.  wróć do Terminala,
-5.  naciśnij Enter.
+1. zaloguj się ręcznie w otwartym Chromium,
+2. poczekaj na załadowanie aplikacji Kontomierz,
+3. nie zamykaj przeglądarki,
+4. wróć do Terminala,
+5. naciśnij Enter.
 
 Sesja zostanie zapisana w:
 
-``` text
+```text
 kontomierz-session.json
 ```
 
-Plik zawiera dane uwierzytelniające sesji i nie powinien być
-udostępniany ani dodawany do repozytorium.
+Jeżeli sesja wygaśnie, ponownie uruchom:
 
-Jeżeli sesja wygaśnie, ponownie wykonaj:
-
-``` bash
+```bash
 node src/login.js
 ```
 
 ## Import
 
-Po przygotowaniu CSV i aktywnej sesji:
+Umieść pliki CSV skonfigurowanych banków w katalogu `data/`, a następnie:
 
-``` bash
+```bash
 node src/index.js
 ```
 
-Przykładowy log:
+Program:
 
-``` text
-==========================
-N26 → Kontomierz importer
-==========================
-Wykryty separator: ,
-Do importu: 10
-Aktualny URL: https://app.kontomierz.pl/finanse/
-Sesja Kontomierza jest aktywna.
+1. odczytuje konfigurację źródeł,
+2. pomija wyłączone źródła,
+3. pomija brakujące pliki,
+4. uruchamia odpowiedni parser dla każdego banku,
+5. zamienia transakcje do wspólnego formatu,
+6. łączy wszystkie transakcje,
+7. sortuje je,
+8. pomija transakcje już zapisane w `imported.json`,
+9. dopasowuje kategorię,
+10. otwiera Kontomierz,
+11. wybiera właściwy portfel,
+12. ustawia datę,
+13. wybiera `Wydatek` lub `Przychód`,
+14. wpisuje kwotę,
+15. wybiera kategorię i subkategorię,
+16. zapisuje transakcję,
+17. zapisuje jej ID w `data/imported.json`.
 
-Dodaję: Telekom Deutschland GmbH — Festnetz
-Data: 2026-06-03
-Kwota: -50.94 EUR
-Kalendarz pokazuje: August 2026
-← poprzedni miesiąc
-Kalendarz pokazuje: July 2026
-← poprzedni miesiąc
-Kalendarz pokazuje: June 2026
-Szukam dnia: "June 3, 2026"
-✓ Wybrano datę 2026-06-03
-✓ Wybrano: Wydatek
-✓ Wybrano portfel N26 EUR
-✓ Dodano
+## Wspólny format transakcji
+
+Każdy parser powinien zwracać obiekty w tym samym formacie:
+
+```javascript
+{
+  id,
+
+  sourceBank,
+  sourceFile,
+  walletName,
+
+  bookingDate,
+  valueDate,
+
+  amount,
+  absoluteAmount,
+  currency,
+  direction,
+
+  partnerName,
+  partnerIban,
+  paymentReference,
+  type,
+  description
+}
+```
+
+`direction`:
+
+```text
+expense
+```
+
+dla wydatku oraz:
+
+```text
+income
+```
+
+dla przychodu.
+
+## Parsery
+
+Każdy bank ma własny moduł w:
+
+```text
+src/parsers/
+```
+
+Przykład:
+
+```text
+src/parsers/n26.js
+src/parsers/mbank.js
+src/parsers/aliorbank.js
+src/parsers/deutschebank.js
+src/parsers/revolut.js
+```
+
+Parser odpowiada za:
+
+- znalezienie właściwego nagłówka CSV,
+- wybór separatora,
+- konwersję dat,
+- konwersję kwot,
+- ustalenie waluty,
+- rozpoznanie przychodu lub wydatku,
+- wyciągnięcie kontrahenta,
+- utworzenie opisu,
+- wygenerowanie stabilnego ID,
+- przypisanie `sourceBank`,
+- przypisanie `walletName`.
+
+## Rejestr parserów
+
+`src/parser.js` pełni rolę rejestru parserów.
+
+Przykład:
+
+```javascript
+const { parseN26 } = require("./parsers/n26");
+const { parseMbank } = require("./parsers/mbank");
+const { parseAliorBank } = require("./parsers/aliorbank");
+
+const PARSERS = {
+  n26: parseN26,
+  mbank: parseMbank,
+  aliorbank: parseAliorBank,
+};
+```
+
+## Dodanie kolejnego banku
+
+1. Dodaj plik CSV, np.:
+
+```text
+data/deutschebank.csv
+```
+
+2. Utwórz parser:
+
+```text
+src/parsers/deutschebank.js
+```
+
+3. Zarejestruj go w `src/parser.js`:
+
+```javascript
+const {
+  parseDeutscheBank
+} = require("./parsers/deutschebank");
+
+const PARSERS = {
+  n26: parseN26,
+  mbank: parseMbank,
+  aliorbank: parseAliorBank,
+  deutschebank: parseDeutscheBank,
+};
+```
+
+4. Dodaj konfigurację w `src/config.js`:
+
+```javascript
+deutschebank: {
+  enabled: true,
+  file: path.join(ROOT, "data", "deutschebank.csv"),
+  walletName: "Deutsche Bank EUR",
+},
+```
+
+Po tych zmianach reszta aplikacji nie wymaga modyfikacji.
+
+## Funkcje wspólne parserów
+
+Kod wspólny powinien znajdować się w:
+
+```text
+src/parsers/common.js
+```
+
+Mogą tam znajdować się funkcje takie jak:
+
+```javascript
+parseAmount()
+normalizeDate()
+createHash()
+parseDelimitedRows()
+detectDelimiter()
 ```
 
 ## Kategorie
 
 Reguły znajdują się w:
 
-``` text
+```text
 src/categories.js
 ```
 
+Kategorie działają na wspólnym formacie transakcji, dlatego te same reguły mogą działać dla różnych banków.
+
 ### Dopasowanie po fragmencie tekstu
 
-``` javascript
+```javascript
 {
-  match: ["LIDL", "REWE", "ALDI"],
+  match: [
+    "LIDL",
+    "REWE",
+    "ALDI",
+    "BIEDRONKA"
+  ],
   direction: "expense",
-  category: "Żywność",
-  subcategory: "Supermarkety",
+  category: "Zakupy",
+  subcategory: "Spożywcze",
 },
 ```
 
-`match` wykorzystuje dopasowanie częściowe, dlatego `LIDL` może pasować
-np. do:
+### Pojedynczy tekst
 
-``` text
-LIDL 2179
-LIDL SAGT DANKE
-Kartenzahlung LIDL München
-```
-
-### Pojedyncze dopasowanie
-
-Można również użyć:
-
-``` javascript
+```javascript
 {
   match: "Telekom",
   direction: "expense",
@@ -268,9 +455,7 @@ Można również użyć:
 
 ### RegExp
 
-Dla bardziej skomplikowanych przypadków:
-
-``` javascript
+```javascript
 {
   matchRegex: [
     /\bFestnetz\b/i
@@ -281,157 +466,193 @@ Dla bardziej skomplikowanych przypadków:
 },
 ```
 
-Nie należy używać `^Festnetz`, jeśli `Festnetz` może występować w środku
-opisu. `^` oznacza początek tekstu.
-
-### Kierunek reguły
+### Kierunek
 
 Tylko wydatki:
 
-``` javascript
+```javascript
 direction: "expense"
 ```
 
 Tylko przychody:
 
-``` javascript
+```javascript
 direction: "income"
 ```
 
-Oba kierunki:
+Oba:
 
-``` javascript
+```javascript
 direction: "both"
 ```
 
-Jeżeli `direction` nie zostanie podany, reguła może domyślnie działać
-dla obu kierunków (zależnie od implementacji `findCategory`).
+### Reguły zależne od banku
+
+Każda transakcja posiada:
+
+```javascript
+transaction.sourceBank
+```
+
+Można więc rozszerzyć `findCategory()` o opcjonalne pole:
+
+```javascript
+bank: "mbank"
+```
+
+jeżeli potrzebne są reguły specyficzne dla jednego źródła.
 
 ## Zapobieganie duplikatom
 
 Po poprawnym dodaniu transakcji jej identyfikator jest zapisywany w:
 
-``` text
+```text
 data/imported.json
 ```
 
-Przy kolejnym uruchomieniu importer pomija znajdujące się tam
-transakcje.
+Przy kolejnych uruchomieniach importer pomija już zapisane identyfikatory.
 
-Dzięki temu można importować partiami:
+Każdy parser powinien generować stabilne ID na podstawie danych źródłowych, np.:
 
-``` javascript
-maxTransactions: 10
-```
-
-a później:
-
-``` javascript
-maxTransactions: 50
-```
-
-i ostatecznie:
-
-``` javascript
-maxTransactions: null
-```
-
-Nie usuwaj `data/imported.json` po udanym imporcie, ponieważ program
-może wtedy ponownie dodać wcześniejsze transakcje.
+- identyfikatora banku,
+- daty,
+- kwoty,
+- waluty,
+- kontrahenta,
+- opisu lub referencji.
 
 ## Obsługa błędów
 
-Importer zatrzymuje się przy pierwszym błędzie, aby uniknąć seryjnego
-dodawania niepoprawnych transakcji.
+Importer zatrzymuje się przy pierwszym błędzie.
 
-Informacje o błędach zapisywane są w:
+Błędy zapisywane są w:
 
-``` text
+```text
 data/errors.json
 ```
 
-Transakcja jest dodawana do `imported.json` dopiero po pomyślnym
-zakończeniu importu.
+Transakcja trafia do `data/imported.json` dopiero po pomyślnym zapisaniu jej w Kontomierzu.
+
+Po poprawieniu błędu można ponownie uruchomić:
+
+```bash
+node src/index.js
+```
 
 ## Kalendarz
 
-Kontomierz korzysta z React Calendar.
+Importer korzysta z elementów React Calendar:
 
-Importer:
+```css
+.react-calendar__navigation__label
+.react-calendar__navigation__prev-button
+.react-calendar__navigation__next-button
+```
 
--   otwiera pole `input[name="date"]`,
--   odczytuje aktualnie wyświetlany miesiąc,
--   używa przycisków `.react-calendar__navigation__prev-button` i
-    `.react-calendar__navigation__next-button`,
--   przechodzi do miesiąca transakcji,
--   znajduje dzień po `abbr[aria-label="..."]`,
--   klika nadrzędny przycisk dnia.
+Dzień jest odnajdywany przez:
 
-Obsługiwane są kalendarze z nazwami miesięcy po polsku i angielsku.
+```html
+<abbr aria-label="August 1, 2026">
+```
 
-## Portfel
+Obsługiwane są polskie i angielskie nazwy miesięcy.
+
+## Wybór portfela
 
 Dropdown portfela jest identyfikowany przez:
 
-``` css
+```css
 button[data-name="wallet"]
 ```
 
-Po jego otwarciu importer wybiera portfel określony w:
+Nazwa portfela pochodzi z:
 
-``` javascript
-accountName: "N26 EUR"
+```javascript
+transaction.walletName
 ```
+
+Dzięki temu importer może podczas jednego uruchomienia dodawać transakcje do wielu różnych portfeli.
+
+## Kolejność importu
+
+Transakcje ze wszystkich aktywnych źródeł są łączone do jednej listy i mogą być sortowane według:
+
+1. daty,
+2. źródła,
+3. identyfikatora transakcji.
 
 ## Bezpieczeństwo
 
-Nie umieszczaj w Git danych sesji ani danych bankowych.
-
 Zalecany `.gitignore`:
 
-``` gitignore
+```gitignore
 node_modules/
+
 kontomierz-session.json
-data/transactions.csv
+
+data/*.csv
 data/imported.json
 data/errors.json
+
 .env
 ```
 
-Szczególnie `kontomierz-session.json` może umożliwiać dostęp do aktywnej
-sesji użytkownika.
+Nie publikuj plików CSV, danych rachunków ani `kontomierz-session.json`.
 
 ## Typowy workflow
 
-Pierwsze uruchomienie:
+Logowanie:
 
-``` bash
+```bash
+node src/login.js
+```
+
+Import:
+
+```bash
+node src/index.js
+```
+
+Po wygaśnięciu sesji:
+
+```bash
 node src/login.js
 node src/index.js
 ```
 
-Kolejne importy:
+## Testowanie nowego parsera
 
-1.  pobierz nowy CSV z N26,
-2.  zapisz go jako `data/transactions.csv`,
-3.  uruchom:
+Najpierw:
 
-``` bash
-node src/index.js
+```javascript
+maxTransactions: 1
 ```
 
-Jeżeli pojawi się informacja o wygaśnięciu sesji:
+Sprawdź:
 
-``` bash
-node src/login.js
-node src/index.js
+- datę,
+- kwotę,
+- walutę,
+- przychód/wydatek,
+- portfel,
+- opis,
+- kategorię,
+- subkategorię.
+
+Następnie:
+
+```javascript
+maxTransactions: 10
 ```
 
-## Uwaga
+a po potwierdzeniu działania:
 
-Importer automatyzuje interfejs webowy Kontomierza. Zmiany w interfejsie
-aplikacji mogą wymagać aktualizacji selektorów Playwright.
+```javascript
+maxTransactions: null
+```
 
-Przed dużym importem zalecane jest przetestowanie programu na kilku
-transakcjach i zweryfikowanie poprawności dat, kwot, kierunków, portfela
-oraz kategorii.
+## Ważna uwaga
+
+Importer automatyzuje interfejs webowy Kontomierza. Zmiany w HTML Kontomierza, nazwach pól, dropdownach, przyciskach lub datepickerze mogą wymagać aktualizacji selektorów Playwright.
+
+Parsery bankowe są niezależne od mechanizmu automatyzacji Kontomierza, dlatego zmiana formatu CSV jednego banku powinna wymagać aktualizacji wyłącznie parsera tego banku.
