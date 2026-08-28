@@ -1,8 +1,7 @@
 node_modules/
 kontomierz-session.json
 data/
+*.csv
 .env
 .env.*
-dist/
-coverage/
 .DS_Store
