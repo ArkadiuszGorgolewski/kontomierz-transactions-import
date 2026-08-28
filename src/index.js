@@ -1,8 +1,8 @@
 const fs = require("node:fs/promises");
-const { findCategory } = require("./categories");
 
 const config = require("./config");
-const { parseCSV } = require("./parser");
+const { parseAllBanks } = require("./parser");
+const { findCategory } = require("./categories");
 const {
   openKontomierz,
   addTransaction,
@@ -10,21 +10,13 @@ const {
 
 async function loadImported() {
   try {
-    const text = await fs.readFile(
-      config.importedFile,
-      "utf8"
-    );
-
+    const text = await fs.readFile(config.importedFile, "utf8");
     const data = JSON.parse(text);
-
-    return new Set(
-      Array.isArray(data) ? data : []
-    );
+    return new Set(Array.isArray(data) ? data : []);
   } catch (error) {
     if (error.code === "ENOENT") {
       return new Set();
     }
-
     throw error;
   }
 }
@@ -32,11 +24,7 @@ async function loadImported() {
 async function saveImported(imported) {
   await fs.writeFile(
     config.importedFile,
-    JSON.stringify(
-      [...imported],
-      null,
-      2
-    ),
+    JSON.stringify([...imported], null, 2),
     "utf8"
   );
 }
@@ -44,105 +32,81 @@ async function saveImported(imported) {
 async function saveErrors(errors) {
   await fs.writeFile(
     config.errorsFile,
-    JSON.stringify(
-      errors,
-      null,
-      2
-    ),
+    JSON.stringify(errors, null, 2),
     "utf8"
   );
 }
 
 async function main() {
-  console.log("==========================");
-  console.log("N26 → Kontomierz importer");
-  console.log("==========================");
+  console.log("================================");
+  console.log("Multi-bank → Kontomierz importer");
+  console.log("================================");
 
-  const transactions =
-    await parseCSV(config.csvFile);
+  const { transactions } = await parseAllBanks(config.banks);
 
-  const imported =
-    await loadImported();
+  console.log(`Łącznie w plikach: ${transactions.length}`);
 
-  let pending =
-    transactions.filter(
-      transaction =>
-        !imported.has(transaction.id)
-    );
+  const imported = await loadImported();
 
-  if (
-    config.maxTransactions !== null
-  ) {
-    pending = pending.slice(
-      0,
-      config.maxTransactions
-    );
+  let pending = transactions.filter(transaction => !imported.has(transaction.id));
+
+  console.log(`Już zaimportowane: ${transactions.length - pending.length}`);
+  console.log(`Do importu: ${pending.length}`);
+
+  if (config.maxTransactions !== null) {
+    pending = pending.slice(0, config.maxTransactions);
+    console.log(`Limit bezpieczeństwa: ${config.maxTransactions}`);
   }
 
-  console.log(
-    `Do importu: ${pending.length}`
-  );
-
   if (pending.length === 0) {
+    console.log("Nie ma nowych transakcji.");
     return;
   }
 
-  const {
-    browser,
-    context,
-    page,
-  } = await openKontomierz();
-
+  const { browser, context, page } = await openKontomierz();
   const errors = [];
 
   try {
     for (const transaction of pending) {
       try {
-        transaction.category =
-          findCategory(transaction);
+        transaction.category = findCategory(transaction);
 
-        if (transaction.category.category) {
+        console.log("");
+        console.log(
+          `[${transaction.sourceBank}] ${transaction.bookingDate} | ` +
+          `${transaction.amount.toFixed(2)} ${transaction.currency} | ` +
+          `portfel: ${transaction.walletName}`
+        );
+
+        if (transaction.category?.category) {
           console.log(
             `Kategoria: ${transaction.category.category}` +
-            (
-              transaction.category.subcategory
-                ? ` → ${transaction.category.subcategory}`
-                : ""
-            ) +
-            ` [reguła: "${transaction.category.matchedBy}"]`
+            (transaction.category.subcategory
+              ? ` → ${transaction.category.subcategory}`
+              : "") +
+            (transaction.category.matchedBy
+              ? ` [reguła: ${transaction.category.matchedBy}]`
+              : "")
           );
         } else {
           console.log("Kategoria: Brak kategorii");
         }
 
-        await addTransaction(
-          page,
-          transaction
-        );
+        await addTransaction(page, transaction);
 
-        imported.add(
-          transaction.id
-        );
-
-        await saveImported(
-          imported
-        );
-
-        await page.waitForTimeout(
-          config.delay
-        );
-
+        imported.add(transaction.id);
+        await saveImported(imported);
+        await page.waitForTimeout(config.delay);
       } catch (error) {
-        console.error(
-          "BŁĄD:",
-          error.message
-        );
+        console.error("BŁĄD:", error.message);
 
         errors.push({
+          sourceBank: transaction.sourceBank,
           transaction,
           error: error.message,
         });
 
+        console.log("Import został zatrzymany na pierwszym błędzie.");
         break;
       }
     }
@@ -154,7 +118,6 @@ async function main() {
     await context.storageState({
       path: config.sessionFile,
     });
-
   } finally {
     await browser.close();
   }
@@ -162,10 +125,6 @@ async function main() {
 
 main().catch(error => {
   console.error("");
-  console.error(
-    "BŁĄD GŁÓWNY:",
-    error.message
-  );
-
+  console.error("BŁĄD GŁÓWNY:", error.message);
   process.exitCode = 1;
 });

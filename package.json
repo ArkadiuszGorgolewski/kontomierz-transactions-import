@@ -1,15 +1,23 @@
 {
-  "name": "n26-kontomierz",
+  "name": "kontomierz-transactions-import",
   "version": "1.0.0",
-  "description": "",
+  "description": "Importer transakcji z plików CSV eksportowanych z niemieckiego N26 do Kontomierz.pl.",
   "main": "index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ArkadiuszGorgolewski/kontomierz-transactions-import.git"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/ArkadiuszGorgolewski/kontomierz-transactions-import/issues"
+  },
+  "homepage": "https://github.com/ArkadiuszGorgolewski/kontomierz-transactions-import#readme",
   "dependencies": {
     "playwright": "^1.62.1"
   }
