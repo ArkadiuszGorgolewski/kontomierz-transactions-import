@@ -1,8 +1,19 @@
 node_modules/
+
+# Login/session
 kontomierz-session.json
-data/
+
+# Private user data
+data/*
 !data/.gitkeep
 *.csv
+
+# Environment / secrets
 .env
 .env.*
+!.env.example
+
+# OS / editor
 .DS_Store
+.vscode/
+.idea/
