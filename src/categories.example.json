@@ -1,0 +1,72 @@
+[
+  {
+    "match": [
+      "LIDL",
+      "REWE",
+      "ALDI"
+    ],
+    "direction": "expense",
+    "category": "Zakupy",
+    "subcategory": "Spożywcze"
+  },
+  {
+    "match": "Telekom",
+    "direction": "expense",
+    "category": "Rachunki i media",
+    "subcategory": "Internet"
+  },
+  {
+    "match": [
+      "GEHALT",
+      "SALARY",
+      "WYNAGRODZENIE"
+    ],
+    "direction": "income",
+    "category": "Przychód",
+    "subcategory": "Pensja"
+  },
+  {
+    "matchRegex": [
+      {
+        "pattern": "\\bFestnetz\\b",
+        "flags": "i"
+      }
+    ],
+    "direction": "expense",
+    "category": "Rachunki i media",
+    "subcategory": "Internet"
+  },
+  {
+    "matchRegex": [
+      {
+        "pattern": "\\b(Shell|Aral|Orlen|BP)\\b",
+        "flags": "i"
+      }
+    ],
+    "direction": "expense",
+    "category": "Samochód",
+    "subcategory": "Paliwo"
+  },
+  {
+    "matchRegex": [
+      {
+        "pattern": "^AMZN",
+        "flags": "i"
+      },
+      {
+        "pattern": "\\bAmazon\\b",
+        "flags": "i"
+      }
+    ],
+    "direction": "expense",
+    "category": "Osobiste",
+    "subcategory": "Inne osobiste"
+  },
+  {
+    "bank": "mbank",
+    "match": "PRZELEW WEWNĘTRZNY",
+    "direction": "both",
+    "category": "Inne",
+    "subcategory": "Przelewy"
+  }
+]

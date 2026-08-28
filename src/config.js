@@ -7,6 +7,11 @@ module.exports = {
   sessionFile: path.join(ROOT, "kontomierz-session.json"),
   importedFile: path.join(ROOT, "data", "imported.json"),
   errorsFile: path.join(ROOT, "data", "errors.json"),
+  categoriesFile: path.join(
+  ROOT,
+  "data",
+  "categories.json"
+),
 
   headless: false,
   slowMo: 200,
