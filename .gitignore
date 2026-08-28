@@ -1,7 +1,7 @@
 node_modules/
 kontomierz-session.json
 data/
-!data/gitkeep
+!data/.gitkeep
 *.csv
 .env
 .env.*
