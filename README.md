@@ -1,130 +1,110 @@
 # Kontomierz Transactions Import
 
-Wielobankowy importer transakcji z plików CSV do Kontomierz.pl.
+A local Node.js application that imports bank transactions from CSV/TSV exports into Kontomierz by automating the Kontomierz web interface with Playwright.
 
-Aplikacja działa w Node.js i wykorzystuje Playwright do automatycznego wprowadzania transakcji przez interfejs webowy Kontomierza. Nie korzysta z publicznego API Kontomierza.
+The project is designed as a **multi-bank importer**: each bank has its own parser, while the import logic and Kontomierz automation are shared.
 
-Projekt jest rozszerzalny: każdy bank może mieć własny parser CSV, ale wszystkie transakcje są zamieniane do wspólnego formatu i obsługiwane przez ten sam mechanizm importu.
+## Features
 
-## Funkcje
+- Import transactions from multiple banks in one run
+- Currently supported:
+  - N26
+  - mBank
+  - Alior Bank
+- Easy configuration of bank files and Kontomierz wallet names
+- Separate parser for each bank
+- Common internal transaction format
+- Automatic transaction categorization
+- Categories stored outside the source code
+- Regex-based category matching
+- Separate rules for expenses and income
+- Duplicate prevention using persistent transaction IDs
+- Stops safely when an import error occurs
+- Optional safety limit for the number of transactions imported in one run
+- Persistent Playwright login session
+- Designed to be extended with additional banks
 
-- import transakcji z wielu banków,
-- osobny parser CSV dla każdego banku,
-- wspólny format transakcji niezależnie od źródła,
-- osobna nazwa portfela Kontomierza dla każdego banku,
-- możliwość włączania i wyłączania źródeł,
-- automatyczne pomijanie brakujących plików CSV,
-- obsługa przychodów i wydatków,
-- automatyczny wybór właściwego portfela,
-- automatyczne ustawianie daty,
-- obsługa polskiej i angielskiej lokalizacji kalendarza,
-- automatyczne przechodzenie między miesiącami i latami,
-- wspólne mapowanie kategorii dla wszystkich banków,
-- kategorie zależne od kierunku transakcji,
-- dopasowanie przez zwykły tekst lub RegExp,
-- opcjonalne reguły kategorii zależne od banku,
-- zapobieganie duplikatom,
-- zatrzymanie importu przy błędzie,
-- zapis błędów do pliku.
-
-## Architektura
+## How it works
 
 ```text
-CSV banku
-   ↓
-parser konkretnego banku
-   ↓
-wspólny format transakcji
-   ↓
-categories.js + data/categories.json
-   ↓
-Playwright
-   ↓
-Kontomierz
+Bank CSV/TSV files
+        |
+        v
+Bank-specific parsers
+        |
+        v
+Common transaction format
+        |
+        v
+Category matching
+        |
+        v
+Kontomierz Playwright automation
+        |
+        v
+Imported transactions
 ```
 
-Każdy parser odpowiada wyłącznie za przekształcenie formatu konkretnego banku do wspólnego modelu.
+Each bank parser converts its own export format into the same internal transaction structure. The rest of the application does not need to know how a particular bank formats its CSV file.
 
-## Wymagania
+## Requirements
 
-- Node.js 18 lub nowszy,
-- npm,
-- Playwright,
-- konto Kontomierz,
-- portfele utworzone w Kontomierzu,
-- pliki CSV wyeksportowane z obsługiwanych banków.
+- Node.js 18+ recommended
+- npm
+- A Kontomierz account
+- Browser access to Kontomierz
 
-Sprawdzenie Node.js:
+## Installation
 
-```bash
-node -v
-npm -v
-```
-
-## Instalacja
+Clone the repository and install dependencies:
 
 ```bash
+git clone <REPOSITORY_URL>
 cd kontomierz-transactions-import
 npm install
-npx playwright install chromium
 ```
 
-Jeżeli projekt jest tworzony od początku:
+Install the Playwright browser if required:
 
 ```bash
-npm init -y
-npm install playwright
 npx playwright install chromium
 ```
 
-## Struktura projektu
+## Project structure
 
 ```text
 kontomierz-transactions-import/
 ├── package.json
 ├── package-lock.json
-├── kontomierz-session.json
-│
-├── src/
-│   ├── config.js
-│   ├── parser.js
-│   ├── categories.js
-│   ├── kontomierz.js
-│   ├── login.js
-│   ├── index.js
-│   └── parsers/
-│       ├── common.js
-│       ├── n26.js
-│       ├── mbank.js
-│       ├── aliorbank.js
-│       └── ...
-│
+├── README.md
+├── .gitignore
 ├── data/
-│   ├── categories.json
-│   ├── n26.csv
-│   ├── mbank.csv
-│   ├── aliorbank.csv
-│   ├── ...
-│   ├── imported.json
-│   └── errors.json
-│
-└── examples/
-    └── categories.example.json
+│   └── .gitkeep
+├── examples/
+│   └── categories.example.json
+└── src/
+    ├── config.js
+    ├── parser.js
+    ├── categories.js
+    ├── kontomierz.js
+    ├── login.js
+    ├── index.js
+    └── parsers/
+        ├── common.js
+        ├── n26.js
+        ├── mbank.js
+        └── aliorbank.js
 ```
 
-Katalog `src/parsers/` może zawierać dowolną liczbę parserów.
+## Configuration
 
-Katalog `data/` zawiera dane prywatne i nie powinien być publikowany w repozytorium.
-
-## Konfiguracja banków i portfeli
-
-Konfiguracja znajduje się w:
+Main configuration is stored in:
 
 ```text
 src/config.js
 ```
 
-Przykład:
+Example:
 
 ```javascript
 const path = require("node:path");
@@ -133,29 +113,9 @@ const ROOT = path.resolve(__dirname, "..");
 
 module.exports = {
   kontomierzUrl: "https://app.kontomierz.pl/",
-
-  sessionFile: path.join(
-    ROOT,
-    "kontomierz-session.json"
-  ),
-
-  categoriesFile: path.join(
-    ROOT,
-    "data",
-    "categories.json"
-  ),
-
-  importedFile: path.join(
-    ROOT,
-    "data",
-    "imported.json"
-  ),
-
-  errorsFile: path.join(
-    ROOT,
-    "data",
-    "errors.json"
-  ),
+  sessionFile: path.join(ROOT, "kontomierz-session.json"),
+  importedFile: path.join(ROOT, "data", "imported.json"),
+  errorsFile: path.join(ROOT, "data", "errors.json"),
 
   headless: false,
   slowMo: 200,
@@ -181,274 +141,320 @@ module.exports = {
       file: path.join(ROOT, "data", "aliorbank.csv"),
       walletName: "Alior Bank PLN",
     },
-
-    // Kolejne banki można dodawać tutaj.
   },
 };
 ```
 
-Liczba skonfigurowanych banków nie jest ograniczona.
+### Bank configuration
 
-### Nazwa portfela
+Each bank has:
 
-`walletName` musi dokładnie odpowiadać nazwie portfela widocznej w Kontomierzu.
+- `enabled` — whether the bank should be imported
+- `file` — path to the exported bank file
+- `walletName` — Kontomierz wallet into which transactions are imported
 
-Przykład:
-
-```javascript
-walletName: "Konto osobiste PLN"
-```
-
-### Włączanie i wyłączanie banków
+For example:
 
 ```javascript
-enabled: true
+mbank: {
+  enabled: true,
+  file: path.join(ROOT, "data", "mbank.csv"),
+  walletName: "mBank PLN",
+}
 ```
 
-Aby wyłączyć źródło:
+You can disable a bank without removing its configuration:
 
 ```javascript
-enabled: false
+mbank: {
+  enabled: false,
+  file: path.join(ROOT, "data", "mbank.csv"),
+  walletName: "mBank PLN",
+}
 ```
 
-## Logowanie
+Missing files are skipped instead of causing the whole import to fail.
 
-Logowanie jest oddzielone od importu:
+## Bank export files
 
-```bash
-node src/login.js
-```
-
-Następnie:
-
-1. zaloguj się ręcznie w Chromium,
-2. poczekaj na załadowanie aplikacji,
-3. nie zamykaj przeglądarki,
-4. wróć do Terminala,
-5. naciśnij Enter.
-
-Sesja zostanie zapisana w:
-
-```text
-kontomierz-session.json
-```
-
-Jeżeli sesja wygaśnie:
-
-```bash
-node src/login.js
-```
-
-## Import
-
-Umieść aktualne CSV w katalogu:
+Put your private bank exports in:
 
 ```text
 data/
 ```
 
-Następnie:
+For example:
+
+```text
+data/
+├── n26.csv
+├── mbank.csv
+├── aliorbank.csv
+└── categories.json
+```
+
+The `data/` directory is intentionally excluded from Git.
+
+**Do not commit bank exports to the repository.**
+
+Bank exports may contain:
+
+- names
+- addresses
+- IBANs/account numbers
+- transaction descriptions
+- balances
+- other personal financial information
+
+## Login
+
+The importer uses a persistent Playwright session.
+
+Run:
+
+```bash
+node src/login.js
+```
+
+A browser window will open. Log in to Kontomierz manually.
+
+After successful login, the session is saved to:
+
+```text
+kontomierz-session.json
+```
+
+The session file contains authentication state and must remain private.
+
+It is ignored by Git.
+
+If the session expires, run the login script again.
+
+## Running the importer
+
+After configuring the bank files and wallet names:
 
 ```bash
 node src/index.js
 ```
 
-Program:
+The importer will:
 
-1. odczytuje konfigurację banków,
-2. pomija wyłączone źródła,
-3. pomija brakujące CSV,
-4. uruchamia odpowiedni parser,
-5. normalizuje transakcje,
-6. łączy je do wspólnej listy,
-7. pomija już zaimportowane transakcje,
-8. dopasowuje kategorię,
-9. otwiera Kontomierz,
-10. wybiera właściwy portfel,
-11. ustawia datę,
-12. wybiera `Wydatek` lub `Przychód`,
-13. wpisuje kwotę,
-14. wybiera kategorię i subkategorię,
-15. zapisuje transakcję,
-16. zapisuje jej ID w `data/imported.json`.
+1. Load enabled bank files
+2. Parse transactions
+3. Combine transactions from all enabled banks
+4. Sort them
+5. Check which transactions have already been imported
+6. Match categories
+7. Open Kontomierz
+8. Add transactions one by one
+9. Save successfully imported transaction IDs
+10. Stop on the first import error
 
-## Wspólny format transakcji
+## Duplicate prevention
 
-Każdy parser powinien zwracać obiekt w tym samym formacie:
+Imported transaction IDs are stored in:
+
+```text
+data/imported.json
+```
+
+Before importing a transaction, the application checks whether its ID is already present.
+
+This makes it possible to run the importer repeatedly without intentionally importing the same transaction again.
+
+The ID is generated by each bank parser from transaction data that should uniquely identify the transaction.
+
+Because bank exports can vary, duplicate detection is not a substitute for checking the result in Kontomierz after an import.
+
+## Error handling
+
+When a transaction cannot be imported, the importer:
+
+- prints the error
+- stores the transaction and error message in `data/errors.json`
+- stops the import at the first error
+
+Already imported transactions remain recorded in `data/imported.json`.
+
+This makes it possible to fix the problem and run the importer again without re-importing transactions that were already processed successfully.
+
+## Safety limit
+
+For testing, you can limit the number of transactions imported during a run:
+
+```javascript
+maxTransactions: 10,
+```
+
+To disable the limit:
+
+```javascript
+maxTransactions: null,
+```
+
+A small limit is recommended when testing changes to parsers, selectors, categories, or Kontomierz automation.
+
+## Transaction format
+
+All bank parsers convert their input into a common transaction structure.
+
+Conceptually:
 
 ```javascript
 {
-  id,
-
-  sourceBank,
-  sourceFile,
-  walletName,
-
-  bookingDate,
-  valueDate,
-
-  amount,
-  absoluteAmount,
-  currency,
-  direction,
-
-  partnerName,
-  partnerIban,
-  paymentReference,
-  type,
-  description
+  id: "...",
+  sourceBank: "n26",
+  bookingDate: "2026-08-31",
+  amount: -25.50,
+  currency: "EUR",
+  partnerName: "Example Store",
+  partnerIban: "...",
+  paymentReference: "...",
+  description: "...",
+  direction: "expense",
+  walletName: "N26 EUR"
 }
 ```
 
-Kierunek transakcji:
+Not every bank provides every field. The individual parsers normalize what is available.
 
-```text
-expense
-```
+The important part is that the Kontomierz import code can work with the same structure regardless of the source bank.
 
-dla wydatku oraz:
+## Bank parsers
 
-```text
-income
-```
-
-dla przychodu.
-
-## Parsery bankowe
-
-Parsery znajdują się w:
+Bank-specific parsing code is located in:
 
 ```text
 src/parsers/
 ```
 
-Przykład:
+### N26
 
 ```text
 src/parsers/n26.js
-src/parsers/mbank.js
-src/parsers/aliorbank.js
-src/parsers/deutschebank.js
-src/parsers/revolut.js
 ```
 
-Parser odpowiada m.in. za:
+The parser handles the N26 CSV export and extracts fields such as:
 
-- znalezienie właściwego nagłówka,
-- separator CSV,
-- konwersję dat,
-- konwersję kwot,
-- ustalenie waluty,
-- kierunek transakcji,
-- kontrahenta,
-- opis,
-- stabilne ID,
-- `sourceBank`,
-- `walletName`.
+- booking date
+- partner name
+- transaction type
+- payment reference
+- amount
+- currency
 
-## Rejestr parserów
+### mBank
 
-`src/parser.js` przechowuje rejestr parserów.
+```text
+src/parsers/mbank.js
+```
 
-Przykład:
+The mBank parser handles the tab-separated export format and extracts the transaction amount and currency from the corresponding amount field.
+
+### Alior Bank
+
+```text
+src/parsers/aliorbank.js
+```
+
+The Alior Bank parser handles the tab-separated export and uses the account currency amount/currency fields as the primary transaction amount and currency.
+
+## Adding another bank
+
+To add another bank:
+
+### 1. Create a parser
+
+Add:
+
+```text
+src/parsers/mybank.js
+```
+
+Implement:
 
 ```javascript
-const { parseN26 } = require("./parsers/n26");
-const { parseMbank } = require("./parsers/mbank");
-const { parseAliorBank } = require("./parsers/aliorbank");
+async function parseMyBank(bankConfig) {
+  // Read bankConfig.file
+  // Parse the bank export
+  // Return an array of normalized transactions
+}
+
+module.exports = { parseMyBank };
+```
+
+### 2. Register the parser
+
+In `src/parser.js`:
+
+```javascript
+const { parseMyBank } = require("./parsers/mybank");
 
 const PARSERS = {
   n26: parseN26,
   mbank: parseMbank,
   aliorbank: parseAliorBank,
+  mybank: parseMyBank,
 };
 ```
 
-## Dodanie kolejnego banku
+### 3. Add configuration
 
-1. Dodaj CSV, np.:
-
-```text
-data/deutschebank.csv
-```
-
-2. Utwórz parser:
-
-```text
-src/parsers/deutschebank.js
-```
-
-3. Zarejestruj go w `src/parser.js`.
-
-4. Dodaj konfigurację w `src/config.js`:
+In `src/config.js`:
 
 ```javascript
-deutschebank: {
+mybank: {
   enabled: true,
-  file: path.join(
-    ROOT,
-    "data",
-    "deutschebank.csv"
-  ),
-  walletName: "Deutsche Bank EUR",
+  file: path.join(ROOT, "data", "mybank.csv"),
+  walletName: "My Bank PLN",
 },
 ```
 
-Po tych zmianach pozostała część aplikacji nie wymaga modyfikacji.
+The rest of the importer can remain unchanged.
 
-## Kategorie
+## Categories
 
-Logika kategorii znajduje się w:
+Category matching is implemented in:
 
 ```text
 src/categories.js
 ```
 
-Prywatne reguły znajdują się w:
+The category definitions should be stored separately in:
 
 ```text
 data/categories.json
 ```
 
-Kod aplikacji i dane kategorii są dzięki temu rozdzielone.
-
-### Przygotowanie pliku kategorii
-
-Repozytorium powinno zawierać przykładowy plik:
+A public example is provided in:
 
 ```text
 examples/categories.example.json
 ```
 
-Po sklonowaniu projektu:
+Copy the example and customize it:
 
 ```bash
-mkdir -p data
 cp examples/categories.example.json data/categories.json
 ```
 
-Następnie edytuj:
+The real category file is ignored by Git.
 
-```text
-data/categories.json
-```
+### Plain text matching
 
-zgodnie z własnymi potrzebami.
-
-## Zwykłe dopasowanie tekstowe
-
-Najprostsza reguła:
+A rule can contain a simple string:
 
 ```json
 {
-  "match": "Telekom",
+  "match": "LIDL",
   "direction": "expense",
-  "category": "Rachunki i media",
-  "subcategory": "Internet"
+  "category": "Zakupy",
+  "subcategory": "Spożywcze"
 }
 ```
 
-Kilka wartości:
+It can also contain multiple strings:
 
 ```json
 {
@@ -463,112 +469,68 @@ Kilka wartości:
 }
 ```
 
-`match` działa jako częściowe dopasowanie tekstu.
+Matching is case-insensitive.
 
-Przykładowo:
+### Regex matching
+
+Regex rules use JSON objects because JavaScript regular expression literals cannot be stored directly in JSON:
+
+```json
+{
+  "matchRegex": [
+    {
+      "pattern": "\b(LIDL|REWE|ALDI|Netto|EDEKA)\b",
+      "flags": "i"
+    }
+  ],
+  "direction": "expense",
+  "category": "Zakupy",
+  "subcategory": "Spożywcze"
+}
+```
+
+Multiple alternatives should generally be combined into one regex when they represent the same category:
 
 ```text
-LIDL 2179 München
+\b(Shell|Aral|Orlen|BP|Agip|ENI)\b
 ```
 
-zostanie dopasowane przez:
+Literal dots should be escaped when they are intended to match an actual dot:
 
-```json
-"LIDL"
+```text
+Pyszne\.pl
+Netflix\.com
 ```
 
-## RegExp w JSON
+### Direction
 
-JSON nie obsługuje bezpośrednio JavaScriptowego zapisu:
+A category rule can be limited to:
 
-```javascript
-/\bFestnetz\b/i
+```text
+expense
 ```
 
-Dlatego regex zapisuje się jako obiekt:
+or:
 
-```json
-{
-  "matchRegex": [
-    {
-      "pattern": "\\bFestnetz\\b",
-      "flags": "i"
-    }
-  ],
-  "direction": "expense",
-  "category": "Rachunki i media",
-  "subcategory": "Internet"
-}
+```text
+income
 ```
 
-Kilka regexów:
+It can also apply to both:
+
+```text
+both
+```
+
+Example:
 
 ```json
 {
   "matchRegex": [
     {
-      "pattern": "\\bShell\\b",
-      "flags": "i"
-    },
-    {
-      "pattern": "\\bAral\\b",
-      "flags": "i"
-    },
-    {
-      "pattern": "\\bOrlen\\b",
+      "pattern": "\b(CELONIS)\b",
       "flags": "i"
     }
-  ],
-  "direction": "expense",
-  "category": "Samochód",
-  "subcategory": "Paliwo"
-}
-```
-
-Można też użyć jednego bardziej złożonego regexu:
-
-```json
-{
-  "matchRegex": [
-    {
-      "pattern": "\\b(Shell|Aral|Orlen|BP)\\b",
-      "flags": "i"
-    }
-  ],
-  "direction": "expense",
-  "category": "Samochód",
-  "subcategory": "Paliwo"
-}
-```
-
-## Kierunek reguły kategorii
-
-Tylko wydatki:
-
-```json
-"direction": "expense"
-```
-
-Tylko przychody:
-
-```json
-"direction": "income"
-```
-
-Oba:
-
-```json
-"direction": "both"
-```
-
-Przykład przychodu:
-
-```json
-{
-  "match": [
-    "GEHALT",
-    "SALARY",
-    "WYNAGRODZENIE"
   ],
   "direction": "income",
   "category": "Przychód",
@@ -576,227 +538,131 @@ Przykład przychodu:
 }
 ```
 
-## Reguły zależne od banku
+This prevents the same merchant text from accidentally assigning an income category to an expense or vice versa.
 
-Regułę można opcjonalnie ograniczyć do jednego banku:
+### Matching fields
 
-```json
-{
-  "bank": "mbank",
-  "match": "PRZELEW WEWNĘTRZNY",
-  "direction": "both",
-  "category": "Inne",
-  "subcategory": "Przelewy"
-}
+Category matching can use transaction information such as:
+
+- partner name
+- payment reference
+- description
+
+The first matching rule wins.
+
+Therefore, put more specific rules before broad rules when necessary.
+
+## Kontomierz automation
+
+The Kontomierz interaction is implemented in:
+
+```text
+src/kontomierz.js
 ```
 
-Wtedy reguła działa tylko, gdy:
+The importer uses Playwright to interact with the web application.
+
+The automation handles, among other things:
+
+- wallet selection
+- transaction direction
+- date selection
+- amount
+- category
+- subcategory
+- transaction creation
+
+The selectors are scoped where possible to the transaction form to reduce the risk of interacting with another element on the page.
+
+Because this project automates a third-party web interface, changes to the Kontomierz frontend may require selector updates.
+
+## Common utilities
+
+Shared parsing functionality is located in:
+
+```text
+src/parsers/common.js
+```
+
+It contains reusable functionality such as:
+
+- delimiter detection
+- parsing delimited files
+- locating header rows
+- decimal number parsing
+- date normalization
+- whitespace cleanup
+- transaction ID hashing
+
+This avoids duplicating the same parsing logic across bank-specific parsers.
+
+## Development and testing
+
+When changing the parser or Playwright automation, use a small test batch first:
 
 ```javascript
-transaction.sourceBank === "mbank"
+maxTransactions: 1,
 ```
 
-## Przykładowy `categories.example.json`
+or:
 
-Przykładowy plik powinien zawierać zarówno zwykłe `match`, jak i `matchRegex`, np.:
-
-```json
-[
-  {
-    "match": [
-      "LIDL",
-      "REWE",
-      "ALDI"
-    ],
-    "direction": "expense",
-    "category": "Zakupy",
-    "subcategory": "Spożywcze"
-  },
-  {
-    "match": "Telekom",
-    "direction": "expense",
-    "category": "Rachunki i media",
-    "subcategory": "Internet"
-  },
-  {
-    "matchRegex": [
-      {
-        "pattern": "\\bFestnetz\\b",
-        "flags": "i"
-      }
-    ],
-    "direction": "expense",
-    "category": "Rachunki i media",
-    "subcategory": "Internet"
-  }
-]
+```javascript
+maxTransactions: 5,
 ```
 
-## Zapobieganie duplikatom
-
-Po poprawnym imporcie ID transakcji jest zapisywane w:
-
-```text
-data/imported.json
-```
-
-Przy kolejnych uruchomieniach importer pomija zapisane ID.
-
-Każdy parser powinien generować stabilne ID na podstawie danych źródłowych.
-
-## Obsługa błędów
-
-Błędy są zapisywane w:
-
-```text
-data/errors.json
-```
-
-Importer zatrzymuje się przy pierwszym błędzie.
-
-Transakcja trafia do `data/imported.json` dopiero po pomyślnym zapisaniu jej w Kontomierzu.
-
-Po naprawieniu błędu można ponownie uruchomić:
+Run:
 
 ```bash
 node src/index.js
 ```
 
-## Kalendarz
+Review the transaction in Kontomierz before increasing the limit.
 
-Importer wykorzystuje React Calendar.
-
-Najważniejsze selektory:
-
-```css
-.react-calendar__navigation__label
-.react-calendar__navigation__prev-button
-.react-calendar__navigation__next-button
-```
-
-Dzień jest wyszukiwany przez element:
-
-```html
-<abbr aria-label="August 1, 2026">
-```
-
-Obsługiwane są polskie i angielskie nazwy miesięcy.
-
-## Wybór portfela
-
-Dropdown portfela jest identyfikowany przez:
-
-```css
-button[data-name="wallet"]
-```
-
-Nazwa portfela pochodzi z:
-
-```javascript
-transaction.walletName
-```
-
-## `.gitignore`
-
-Katalog `data/` zawiera prywatne dane i powinien być ignorowany.
-
-Zalecany `.gitignore`:
-
-```gitignore
-node_modules/
-
-kontomierz-session.json
-
-data/*
-!data/.gitkeep
-
-.env
-```
-
-Dzięki temu automatycznie ignorowane są:
+When changing category rules, verify the console output:
 
 ```text
-data/categories.json
-data/*.csv
-data/imported.json
-data/errors.json
+Kategoria: Zakupy → Spożywcze [reguła: ...]
 ```
 
-Przykładowe kategorie znajdują się poza `data/`:
+This shows which rule matched the transaction.
+
+## Extensibility
+
+The architecture is intentionally split into separate layers:
 
 ```text
-examples/categories.example.json
+Bank-specific parsing
+        ↓
+Normalized transaction model
+        ↓
+Category matching
+        ↓
+Kontomierz automation
 ```
 
-i mogą być bezpiecznie publikowane w repozytorium.
+This means new functionality can generally be added without modifying unrelated parts of the application.
 
-Jeżeli chcesz zachować pusty katalog `data/` w Git:
+Possible future extensions include:
 
-```bash
-touch data/.gitkeep
-```
+- additional banks
+- additional category rules
+- dry-run mode
+- more detailed import reports
+- configurable transaction filtering
+- automated tests for individual parsers
 
-## Typowy workflow
+## Limitations
 
-Pierwsze logowanie:
+This project depends on the current Kontomierz web interface.
 
-```bash
-node src/login.js
-```
+It does not use a documented public Kontomierz API. Playwright automation may stop working if the website changes its HTML structure, selectors, form behavior, or authentication flow.
 
-Przygotowanie kategorii:
+Bank export formats can also change over time. If a bank changes its CSV/TSV format, the corresponding parser may need to be updated.
 
-```bash
-mkdir -p data
-cp examples/categories.example.json data/categories.json
-```
+Always verify imported transactions in Kontomierz, especially after making changes to a parser or the automation code.
 
-Umieść eksporty bankowe w `data/`, a następnie:
+## Disclaimer
 
-```bash
-node src/index.js
-```
+This project is an independent automation tool and is not affiliated with or endorsed by Kontomierz or the supported banks.
 
-Po wygaśnięciu sesji:
-
-```bash
-node src/login.js
-node src/index.js
-```
-
-## Testowanie
-
-Przy pierwszym uruchomieniu lub dodaniu nowego parsera:
-
-```javascript
-maxTransactions: 1
-```
-
-Sprawdź:
-
-- datę,
-- kwotę,
-- walutę,
-- kierunek,
-- portfel,
-- opis,
-- kategorię,
-- subkategorię.
-
-Następnie:
-
-```javascript
-maxTransactions: 10
-```
-
-a po potwierdzeniu działania:
-
-```javascript
-maxTransactions: null
-```
-
-## Ważna uwaga
-
-Importer automatyzuje interfejs webowy Kontomierza. Zmiany w HTML, nazwach pól, dropdownach, przyciskach lub datepickerze mogą wymagać aktualizacji selektorów Playwright.
-
-Parsery bankowe są niezależne od mechanizmu automatyzacji Kontomierza, dlatego zmiana formatu CSV jednego banku powinna wymagać aktualizacji wyłącznie parsera tego banku.
+Use it at your own risk and verify imported financial data before relying on it.
