@@ -1,6 +1,6 @@
 # Kontomierz Transactions Import
 
-A local Node.js application that imports bank transactions from CSV/TSV exports into Kontomierz by automating the Kontomierz web interface with Playwright.
+A local Node.js unofficial application that imports bank transactions from CSV/TSV exports into Kontomierz by automating the Kontomierz web interface with Playwright. This tool is intended for personal use with data the user is authorized to access and import. The application does not bypass authentication, CAPTCHA, access controls, or other security mechanisms.
 
 The project is designed as a **multi-bank importer**: each bank has its own parser, while the import logic and Kontomierz automation are shared.
 
