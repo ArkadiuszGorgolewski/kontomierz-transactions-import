@@ -258,6 +258,7 @@ async function selectCategory(page, transaction) {
 
   const subcategory = page
     .getByRole("listbox")
+    .locator("span")
     .getByText(category.subcategory, { exact: true });
 
   await subcategory.waitFor({ state: "visible", timeout: 5000 });
